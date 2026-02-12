@@ -2,31 +2,31 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vendor Price Check</title>
+    <title>Vendor MVP</title>
     <style>
-        body { font-family: monospace; padding: 20px; background: #fff; color: #000; line-height: 1.6; }
-        .data-row { border-bottom: 1px solid #ddd; padding: 10px 0; }
-        .label { font-weight: bold; text-transform: uppercase; font-size: 12px; color: #666; }
-        .price-large { font-size: 32px; font-weight: bold; color: green; }
-        .api-price { color: blue; font-weight: bold; }
+        body { font-family: -apple-system, sans-serif; padding: 20px; background: #fff; line-height: 1.5; }
+        .box { border: 1px solid #ddd; padding: 20px; border-radius: 12px; }
+        .price-label { font-size: 12px; font-weight: bold; color: #666; text-transform: uppercase; }
+        .price-big { font-size: 36px; font-weight: 800; color: #2e7d32; display: block; margin: 5px 0; }
+        .market-price { color: #0288d1; font-weight: bold; }
+        .error { color: red; font-size: 12px; margin-top: 10px; }
     </style>
 </head>
 <body>
-    <div id="content">
-        <h1 id="name">Loading...</h1>
-        <div class="data-row"><span class="label">Number:</span> <span id="num">--</span></div>
-        <div class="data-row"><span class="label">Grade:</span> <span id="grade">--</span></div>
-        <div class="data-row"><span class="label">Condition:</span> <span id="cond">--</span></div>
-        <div class="data-row"><span class="label">Collectr:</span> <span id="collectr">--</span></div>
-        
-        <div style="margin-top:20px;">
-            <span class="label">Asking Price:</span><br>
-            <span id="andy-price" class="price-large">--</span>
-        </div>
+    <div id="main-content">
+        <div class="box">
+            <h1 id="card-name" style="margin:0 0 10px 0;">Loading...</h1>
+            <div id="card-details" style="color:#666; margin-bottom:15px;">--</div>
+            
+            <div style="margin-bottom:20px;">
+                <span class="price-label">Asking Price</span>
+                <span id="andy-price" class="price-big">--</span>
+            </div>
 
-        <div style="margin-top:20px; background: #f0f0f0; padding: 10px;">
-            <span class="label">Live TCG Market:</span><br>
-            <span id="api-price" class="api-price">Fetching...</span>
+            <div style="background:#f1f9ff; padding:15px; border-radius:8px;">
+                <span class="price-label">Live Market (TCGPlayer)</span><br>
+                <span id="market-price" class="market-price">Searching...</span>
+            </div>
         </div>
     </div>
 
@@ -34,34 +34,46 @@
         const params = new URLSearchParams(window.location.search);
         const cardId = params.get('id');
 
+        // Step 1: Load Spreadsheet Data
         fetch('card_data.json')
-            .then(res => res.json())
+            .then(r => r.json())
             .then(data => {
-                const card = data.find(c => String(c['Unique Code']) === String(cardId));
-                if (card) {
-                    document.getElementById('name').innerText = card['Product Name'];
-                    document.getElementById('num').innerText = card['Card Number'];
-                    document.getElementById('grade').innerText = card['Grade'];
-                    document.getElementById('cond').innerText = card['Card Condition'];
-                    document.getElementById('collectr').innerText = `$${card['Collectr Value']}`;
-                    document.getElementById('andy-price').innerText = `$${parseFloat(card['Suggested Selling Price (Fair Market)']).toFixed(2)}`;
-
-                    // Minimal API Call for JUST price
-                    const query = encodeURIComponent(`name:"${card['Product Name']}" number:"${card['Card Number']}"`);
-                    fetch(`https://api.pokemontcg.io/v2/cards?q=${query}`)
-                        .then(r => r.json())
-                        .then(api => {
-                            if(api.data && api.data[0] && api.data[0].tcgplayer) {
-                                const p = api.data[0].tcgplayer.prices;
-                                const market = (p.holofoil || p.reverseHolofoil || p.normal || {}).market;
-                                document.getElementById('api-price').innerText = market ? `$${market.toFixed(2)}` : "N/A";
-                            } else {
-                                document.getElementById('api-price').innerText = "Not Found";
-                            }
-                        });
-                } else {
-                    document.getElementById('content').innerText = "Error: Card ID not found.";
+                const card = data.find(c => String(c['Unique Code']).trim() === String(cardId).trim());
+                
+                if (!card) {
+                    document.getElementById('card-name').innerText = "Card Not Found";
+                    return;
                 }
+
+                // Show Spreadsheet Data Immediately
+                document.getElementById('card-name').innerText = card['Product Name'];
+                document.getElementById('card-details').innerText = `${card['Card Number']} | ${card['Grade']} | ${card['Card Condition']}`;
+                document.getElementById('andy-price').innerText = `$${parseFloat(card['Suggested Selling Price (Fair Market)']).toFixed(2)}`;
+
+                // Step 2: Sequential API Call (wrapped in try/catch to prevent white screen)
+                try {
+                    // We only use the Name for the API search to keep it "Simple & Safe"
+                    const searchName = card['Product Name'].split('(')[0].trim(); 
+                    const apiUrl = `https://api.pokemontcg.io/v2/cards?q=name:"${searchName}"`;
+
+                    fetch(apiUrl)
+                        .then(apiRes => apiRes.json())
+                        .then(apiData => {
+                            if (apiData.data && apiData.data[0]) {
+                                const tcg = apiData.data[0].tcgplayer?.prices;
+                                const livePrice = (tcg?.holofoil || tcg?.reverseHolofoil || tcg?.normal || {}).market;
+                                document.getElementById('market-price').innerText = livePrice ? `$${livePrice.toFixed(2)}` : "Price Not Available";
+                            } else {
+                                document.getElementById('market-price').innerText = "Market Data Missing";
+                            }
+                        })
+                        .catch(e => { document.getElementById('market-price').innerText = "API Error"; });
+                } catch (e) {
+                    console.error("API Search failed", e);
+                }
+            })
+            .catch(e => {
+                document.body.innerHTML = `<div class="error">CRITICAL ERROR: Failed to load card_data.json. Check filename and path.</div>`;
             });
     </script>
 </body>
