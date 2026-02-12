@@ -1,7 +1,6 @@
 <script>
     const params = new URLSearchParams(window.location.search);
     const cardId = params.get('id');
-    const venmoUser = "AndyBWiese"; 
 
     fetch('card_data.json')
         .then(res => res.json())
@@ -9,45 +8,37 @@
             const card = data.find(c => c['Unique Code'] === cardId);
             if (card) {
                 document.getElementById('name').innerText = card['Product Name'];
-                document.getElementById('set').innerText = card['Set'];
+                document.getElementById('set').innerHTML = `Card #${card['Card Number']} | ${card['Card Condition']} | Grade: ${card['Grade']}`;
+                document.getElementById('price').innerText = `$${card['Suggested Selling Price (Fair Market)'].toFixed(2)}`;
                 
-                // 1. Show Andy's Price (from the spreadsheet)
-                const andyPrice = card['Suggested Selling Price (Fair Market)'];
-                document.getElementById('price').innerText = `$${andyPrice.toFixed(2)}`;
+                // Add the Benchmark Section
+                const benchmarks = document.createElement('div');
+                benchmarks.style.textAlign = 'left';
+                benchmarks.style.margin = '20px auto';
+                benchmarks.style.maxWidth = '300px';
+                benchmarks.style.fontSize = '0.9rem';
+                benchmarks.style.background = '#f1f1f1';
+                benchmarks.style.padding = '15px';
+                benchmarks.style.borderRadius = '10px';
                 
-                // 2. NEW: Fetch Art + Live Market Price
-                const query = encodeURIComponent(`name:"${card['Product Name']}" set.name:"${card['Set']}"`);
-                fetch(`https://api.pokemontcg.io/v2/cards?q=${query}`)
-                    .then(apiRes => apiRes.json())
-                    .then(apiData => {
-                        if (apiData.data && apiData.data.length > 0) {
-                            const apiCard = apiData.data[0];
-                            
-                            // Show Image
-                            const img = document.getElementById('card-img');
-                            img.src = apiCard.images.large;
-                            img.style.display = 'block';
+                benchmarks.innerHTML = `
+                    <div style="margin-bottom:5px"><strong>eBay Last Sold:</strong> $${card['eBay Last Sold']}</div>
+                    <div style="margin-bottom:5px"><strong>Price Charting:</strong> $${card['Price Charting Market Price']}</div>
+                    <div><strong>Collectr Value:</strong> $${card['Collectr Value']}</div>
+                `;
+                document.querySelector('.container').appendChild(benchmarks);
 
-                            // Get Live TCGPlayer Price
-                            if (apiCard.tcgplayer && apiCard.tcgplayer.prices) {
-                                // We'll try to get the 'Holofoil' or 'Normal' market price
-                                const pData = apiCard.tcgplayer.prices;
-                                const marketPrice = (pData.holofoil || pData.reverseHolofoil || pData.normal || {}).market;
-                                
-                                if (marketPrice) {
-                                    const marketDiv = document.createElement('div');
-                                    marketDiv.style.color = '#888';
-                                    marketDiv.style.fontSize = '0.9rem';
-                                    marketDiv.innerHTML = `Live Market Avg: <s>$${marketPrice.toFixed(2)}</s>`;
-                                    document.getElementById('price').parentNode.appendChild(marketDiv);
-                                }
-                            }
+                // Fetch Image from API
+                const query = encodeURIComponent(`name:"${card['Product Name']}" number:"${card['Card Number']}"`);
+                fetch(`https://api.pokemontcg.io/v2/cards?q=${query}`)
+                    .then(r => r.json())
+                    .then(api => {
+                        if(api.data[0]) {
+                            const img = document.getElementById('card-img');
+                            img.src = api.data[0].images.large;
+                            img.style.display = 'block';
                         }
                     });
-
-                // Update Venmo Link
-                const note = encodeURIComponent(`Buying ${card['Product Name']} (${card['Set']})`);
-                document.getElementById('buy-link').href = `venmo://paycharge?txn=pay&recipients=${venmoUser}&amount=${andyPrice}&note=${note}`;
             }
         });
 </script>
