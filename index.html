@@ -1,65 +1,53 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Golden 9 Bakery - Card Scan</title>
-    <style>
-        :root { --primary: #3d95ce; --success: #2e7d32; --bg: #f8f9fa; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
-        .container { background: white; width: 100%; max-width: 400px; padding: 30px 20px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); text-align: center; }
-        #card-img { width: 100%; max-width: 250px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); display: none; margin-left: auto; margin-right: auto; }
-        .label { font-size: 0.8rem; font-weight: bold; color: #aaa; text-transform: uppercase; margin-bottom: 5px; }
-        h1 { font-size: 1.8rem; margin: 0; color: #222; }
-        .set { color: #888; margin-bottom: 20px; display: block; }
-        .price-tag { background: #e8f5e9; color: var(--success); padding: 15px; border-radius: 12px; margin-bottom: 20px; }
-        .price-value { font-size: 2.5rem; font-weight: 800; display: block; }
-        .venmo-btn { display: block; background: var(--primary); color: white; padding: 15px; border-radius: 10px; text-decoration: none; font-weight: bold; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <img id="card-img" src="" alt="Card Art">
-        <div class="label" id="status-label">Card Found</div>
-        <h1 id="name">Loading...</h1>
-        <span class="set" id="set">Please wait</span>
-        
-        <div class="price-tag">
-            <span class="price-value" id="price">--</span>
-            <small>LIVE MARKET PRICE</small>
-        </div>
+<script>
+    const params = new URLSearchParams(window.location.search);
+    const cardId = params.get('id');
+    const venmoUser = "AndyBWiese"; 
 
-        <a id="buy-link" href="#" class="venmo-btn">Buy via Venmo</a>
-    </div>
+    fetch('card_data.json')
+        .then(res => res.json())
+        .then(data => {
+            const card = data.find(c => c['Unique Code'] === cardId);
+            if (card) {
+                document.getElementById('name').innerText = card['Product Name'];
+                document.getElementById('set').innerText = card['Set'];
+                
+                // 1. Show Andy's Price (from the spreadsheet)
+                const andyPrice = card['Suggested Selling Price (Fair Market)'];
+                document.getElementById('price').innerText = `$${andyPrice.toFixed(2)}`;
+                
+                // 2. NEW: Fetch Art + Live Market Price
+                const query = encodeURIComponent(`name:"${card['Product Name']}" set.name:"${card['Set']}"`);
+                fetch(`https://api.pokemontcg.io/v2/cards?q=${query}`)
+                    .then(apiRes => apiRes.json())
+                    .then(apiData => {
+                        if (apiData.data && apiData.data.length > 0) {
+                            const apiCard = apiData.data[0];
+                            
+                            // Show Image
+                            const img = document.getElementById('card-img');
+                            img.src = apiCard.images.large;
+                            img.style.display = 'block';
 
-    <script>
-        const params = new URLSearchParams(window.location.search);
-        const cardId = params.get('id');
-
-        fetch('card_data.json')
-            .then(res => res.json())
-            .then(data => {
-                const card = data.find(c => c['Unique Code'] === cardId);
-                if (card) {
-                    document.getElementById('name').innerText = card['Product Name'];
-                    document.getElementById('set').innerText = card['Set'];
-                    document.getElementById('price').innerText = `$${card['Suggested Selling Price (Fair Market)'].toFixed(2)}`;
-                    
-                    // NEW: FETCH THE IMAGE
-                    const query = encodeURIComponent(`name:"${card['Product Name']}" set.name:"${card['Set']}"`);
-                    fetch(`https://api.pokemontcg.io/v2/cards?q=${query}`)
-                        .then(apiRes => apiRes.json())
-                        .then(apiData => {
-                            if (apiData.data && apiData.data.length > 0) {
-                                const img = document.getElementById('card-img');
-                                img.src = apiData.data[0].images.large;
-                                img.style.display = 'block';
+                            // Get Live TCGPlayer Price
+                            if (apiCard.tcgplayer && apiCard.tcgplayer.prices) {
+                                // We'll try to get the 'Holofoil' or 'Normal' market price
+                                const pData = apiCard.tcgplayer.prices;
+                                const marketPrice = (pData.holofoil || pData.reverseHolofoil || pData.normal || {}).market;
+                                
+                                if (marketPrice) {
+                                    const marketDiv = document.createElement('div');
+                                    marketDiv.style.color = '#888';
+                                    marketDiv.style.fontSize = '0.9rem';
+                                    marketDiv.innerHTML = `Live Market Avg: <s>$${marketPrice.toFixed(2)}</s>`;
+                                    document.getElementById('price').parentNode.appendChild(marketDiv);
+                                }
                             }
-                        });
-                } else {
-                    document.getElementById('name').innerText = "Card Not Found";
-                }
-            });
-    </script>
-</body>
-</html>
+                        }
+                    });
+
+                // Update Venmo Link
+                const note = encodeURIComponent(`Buying ${card['Product Name']} (${card['Set']})`);
+                document.getElementById('buy-link').href = `venmo://paycharge?txn=pay&recipients=${venmoUser}&amount=${andyPrice}&note=${note}`;
+            }
+        });
+</script>
